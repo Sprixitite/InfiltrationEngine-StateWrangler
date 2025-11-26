@@ -21,7 +21,7 @@ local keyWriters = {
 
 local valueWriters = {
 	string = function(v)
-		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t") .. "\""
+		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f") .. "\""
 	end,
 	table = function(v)
 		return TableWriter.write_tbl(v)
@@ -36,7 +36,10 @@ local valueWriters = {
 		return "nil"
 	end,
 	Color3 = function(v)
-		return `Color3.fromRGB({v.R},{v.G},{v.B})`
+		local r = math.round(v.R*255)
+		local g = math.round(v.G*255)
+		local b = math.round(v.B*255)
+		return `Color3.fromRGB({r},{g},{b})`
 	end,
 }
 

@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Folder" referent="RBXFFE4FD6EEB8C4CC699613232852C7165">
+	<Item class="Folder" referent="RBXBDD5C7DE776D4BD9B5C6AB1C20D373B4">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -10,7 +10,7 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBX483C9D2303B74381B0A61211B7EBB26E">
+		<Item class="ModuleScript" referent="RBXFAA439A62C7C40B48A8DAB698F3AF972">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[
@@ -162,18 +162,20 @@ return APIConsumer]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="Script" referent="RBX451720F3AD864D8693D593CCA8BEFE96">
+		<Item class="Script" referent="RBXE652DA6BBED54A33B2CE44873861DAD9">
 			<Properties>
 				<ProtectedString name="Source"><![CDATA[local apiConsumer = require(script.Parent.APIConsumer)
 local warnLogger = require(script.Parent.Slogger)
 warnLogger.init{postInit = table.freeze, logFunc = warn}
 local tableWriter = require(script.Parent.TableWriter)
+local glut = require(script.Parent.GLUt)
 
 local runService = game:GetService("RunService")
 
 type APIReference = apiConsumer.APIReference
 
 local warn = warnLogger.new("StateWrangler")
+glut.configure{ warn = warn }
 
 local hookName = nil
 
@@ -211,10 +213,24 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 	
 	for _, child in missionGlobalFolder:GetDescendants() do
 		if child:IsA("Folder") then continue end
+		
+		local warn = warn.specialize(`MissionGlobal {child.Parent}.{child} is invalid`)
 		if not child:IsA("StringValue") then
-			warn(`MissionGlobal {child.Parent}.{child} is invalid`, `Expected type StringValue got {child.ClassName}`)
+			warn(`Expected type StringValue got {child.ClassName}`, "Value will be ignored")
+			continue
 		end
-		missionGlobalData[child.Name] = child.Value
+		
+		local dest = child:GetAttribute("Destination") or "Globals"
+		if type(dest) ~= "string" then
+			warn(`Destination attribute found, but of unexpected type {type(dest)}`, "Destination will default to Globals")
+			dest = "Globals"
+		end
+		
+		missionGlobalData[child.Name] = {
+			Destination = glut.str_split(dest, '.'),
+			DestinationFull = dest,
+			Value = child.Value
+		}
 	end
 	
 	missionGlobalFolder:Destroy()
@@ -227,20 +243,24 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 	if not success then warn("Error while running MissionSetup", missionSetup) return end
 	
 	local missionGlobalData = callbackState.MissionGlobals
-	print(missionGlobalData)
 	if missionGlobalData == nil then return end
-	if missionSetup.Globals == nil then
-		warn("MissionSetup has no Globals table, create one if needed!")
-		return
-	end
 	
 	for k, v in pairs(missionGlobalData) do
-		if missionSetup.Globals[k] ~= nil then
+		local value = tostring(v.Value)
+		local destFound, dest = glut.tbl_tryindex(missionSetup, unpack(v.Destination))
+		local fullDest = v.DestinationFull
+		
+		if not destFound or not glut.typecheck(dest, "table") then
+			warn(`Destination MissionSetup.{fullDest} is invalid - destination must be an already-existing table`, "StateValue will be skipped" )
+			continue
+		end
+		if dest[k] ~= nil then
 			warn(`StateWrangler instructed to set Globals.{k} = {v}, but a Global of the same name already exists`, "Global will be skipped")
 			continue
 		end
-		print(`Injecting Global {k} = {v}`)
-		missionSetup.Globals[tostring(k)] = tostring(v)
+		
+		print(`StateWrangler : Injecting MissionSetup.{fullDest}[\"{k}\"] = \"{value}\"`)
+		dest[tostring(k)] = value
 	end
 	
 	local newSrc = "return " .. tableWriter.write_tbl(missionSetup)
@@ -260,7 +280,7 @@ apiConsumer.DoAPILoop(plugin, "InfiltrationEngine-StateWrangler", StateWrangler.
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX60957A2C93FB4B9BA0CD38FA65AD73BD">
+		<Item class="ModuleScript" referent="RBXC6BE4FB86BF24A05BCCF6C4646F9A850">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[
@@ -338,7 +358,7 @@ return slogger]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBX883476EAC41643C8A89B8ADD8037D614">
+		<Item class="ModuleScript" referent="RBXD9CADC3186CE43A4858AB68956A9CDB9">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local TableWriter = {}
@@ -364,7 +384,7 @@ local keyWriters = {
 
 local valueWriters = {
 	string = function(v)
-		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t") .. "\""
+		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f") .. "\""
 	end,
 	table = function(v)
 		return TableWriter.write_tbl(v)
@@ -379,7 +399,10 @@ local valueWriters = {
 		return "nil"
 	end,
 	Color3 = function(v)
-		return `Color3.fromRGB({v.R},{v.G},{v.B})`
+		local r = math.round(v.R*255)
+		local g = math.round(v.G*255)
+		local b = math.round(v.B*255)
+		return `Color3.fromRGB({r},{g},{b})`
 	end,
 }
 
@@ -454,6 +477,181 @@ return TableWriter]]></ProtectedString>
 				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 				<bool name="DefinesCapabilities">false</bool>
 				<string name="Name">TableWriter</string>
+				<int64 name="SourceAssetId">-1</int64>
+				<BinaryString name="Tags"></BinaryString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBXA694ACDDC9AC4A0082CC3C54543E0216">
+			<Properties>
+				<Content name="LinkedSource"><null></null></Content>
+				<ProtectedString name="Source"><![CDATA[--[[
+	GLUt // GoodLuaUtilities // Lua5.1 utilities module
+	
+	© Sprixitite, 2025
+]]
+
+local GLUt = {}
+
+local GLUtCfg = {
+	print = print,
+	warn  = function(...) print("WARNING", ...) end,
+	error = error,
+	type  = type
+}
+
+local patternSpecChars = { '(', ')', '.', '%', '+', '-', '*', '?', '[', ']', '^', '$' }
+
+function GLUt.configure(tbl)
+	for k, v in pairs(tbl) do
+		if GLUtCfg[k] ~= nil then
+			GLUtCfg[k] = v
+		else
+			GLUtCfg.warn("Attempt to set invalid GLUtCfg Key \"" .. tostring(k) .. "\"")
+		end
+	end
+end
+
+function GLUt.default(arg, default)
+	return (arg == nil) and default or arg
+end
+
+function GLUt.typecheck(arg, expected, argName, fName)
+	local argType = GLUtCfg.type(arg)
+	
+	expected = string.gsub(expected, '?', "|nil")
+	for _, validType in pairs(GLUt.str_split(expected, '|')) do
+		if validType == argType then return true end
+	end
+	
+	if argName ~= nil then
+		local w = (GLUtCfg.type(fName)~="string") and "Expected arg \"" or fName .. ": expected arg \""
+		GLUtCfg.warn(w .. argName .. "\" of type \"" .. expected .. "\" got type \"" .. argType .. "\"!")
+	end
+	
+	return false
+end
+
+function GLUt.vararg_capture(...)
+	local n = select('#', ...)
+	return n, { ... }
+end
+
+function GLUt.vararg_iter(...)
+	local n, t = GLUt.vararg_capture(...)
+	local i = 0
+	return function()
+		i = i + 1
+		if i <= n then return i, t[i], n end
+	end, t
+end
+
+function GLUt.str_split(str, separator)
+	str = str .. separator
+	separator = GLUt.str_escape_pattern(separator)
+	
+	local substrs = {}
+	for substr in string.gmatch(str, "(.-)" .. separator) do
+		substrs[#substrs+1] = substr
+	end
+	return substrs
+end
+
+function GLUt.str_escape_pattern(str)
+	local escaped = str
+	for _, specChar in ipairs(patternSpecChars) do
+		local escapedSpec = '%' .. specChar
+		escaped = string.gsub(escaped, escapedSpec, (specChar == '%') and "%%" or '%' .. escapedSpec)
+	end
+	return escaped
+end
+
+function GLUt.str_double_substr(str, substr)
+	local safe = GLUt.str_escape_pattern(substr)
+	return string.gsub(str, safe, safe .. safe)
+end
+
+function GLUt.str_isempty(str)
+	return string.match(str, "^%s$") ~= nil
+end
+
+function GLUt.str_chariter(str)
+	local n = #str
+	local i = 0
+	return function()
+		i = i + 1
+		if i <= n then return GLUt.str_getchar(str, i) end
+	end
+end
+
+function GLUt.str_getchar(str, i)
+	return string.sub(str, i, i)
+end
+
+function GLUt.kvp_tostring(k, v)
+	return tostring(k) .. " = " .. tostring(v)
+end
+
+function GLUt.tbl_tryindex(tbl, ...)
+	local indexing = tbl
+	for _, k in GLUt.vararg_iter(...) do
+		if GLUtCfg.type(indexing) ~= "table" then
+			return false, indexing
+		end
+		indexing = indexing[tostring(k)]
+	end
+
+	return true, indexing
+end
+
+function GLUt.tbl_clone(tbl, shallow)
+	shallow = GLUt.default(shallow, false)
+	
+	local cloned = {}
+	for k, v in pairs(tbl) do
+		if GLUtCfg.type(v) == "table" and not shallow then
+			cloned[k] = GLUt.tbl_clone(v, shallow)
+		else
+			cloned[k] = v
+		end
+	end
+	return cloned
+end
+
+function GLUt.tbl_findsize(tbl)
+	local i = 0
+	for _, _ in pairs(tbl) do i = i + 1 end
+	return i
+end
+
+local function tbl_tostring(tblName, tbl, levels, level)
+	local str = tblName .. " = {"
+	local indent = string.rep("  ", level)
+	local n = GLUt.tbl_findsize(tbl)
+	local i = 0
+	for k, v in pairs(tbl) do
+		i = i + 1
+		str = str .. '\n' .. indent
+		if GLUtCfg.type(v) == "table" and levels > level then
+			str = str .. tbl_tostring(k, v, levels, level+1)
+		else
+			str = str .. GLUt.kvp_tostring(k, v)
+		end
+		if i < n then str = str .. ',' end
+	end
+	return str
+end
+
+function GLUt.tbl_tostring(tbl, levels, tblName)
+	GLUt.default(tblName, tostring(tbl))
+	return tbl_tostring(tblName, tbl, levels, 1)
+end
+
+return GLUt]]></ProtectedString>
+				<string name="ScriptGuid">{5EAA06A7-E61C-4D11-9CC8-10AA3EE0D980}</string>
+				<BinaryString name="AttributesSerialize"></BinaryString>
+				<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
+				<bool name="DefinesCapabilities">false</bool>
+				<string name="Name">GLUt</string>
 				<int64 name="SourceAssetId">-1</int64>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>

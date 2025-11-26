@@ -2,12 +2,14 @@ local apiConsumer = require(script.Parent.APIConsumer)
 local warnLogger = require(script.Parent.Slogger)
 warnLogger.init{postInit = table.freeze, logFunc = warn}
 local tableWriter = require(script.Parent.TableWriter)
+local glut = require(script.Parent.GLUt)
 
 local runService = game:GetService("RunService")
 
 type APIReference = apiConsumer.APIReference
 
 local warn = warnLogger.new("StateWrangler")
+glut.configure{ warn = warn }
 
 local hookName = nil
 
@@ -45,10 +47,24 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 	
 	for _, child in missionGlobalFolder:GetDescendants() do
 		if child:IsA("Folder") then continue end
+		
+		local warn = warn.specialize(`MissionGlobal {child.Parent}.{child} is invalid`)
 		if not child:IsA("StringValue") then
-			warn(`MissionGlobal {child.Parent}.{child} is invalid`, `Expected type StringValue got {child.ClassName}`)
+			warn(`Expected type StringValue got {child.ClassName}`, "Value will be ignored")
+			continue
 		end
-		missionGlobalData[child.Name] = child.Value
+		
+		local dest = child:GetAttribute("Destination") or "Globals"
+		if type(dest) ~= "string" then
+			warn(`Destination attribute found, but of unexpected type {type(dest)}`, "Destination will default to Globals")
+			dest = "Globals"
+		end
+		
+		missionGlobalData[child.Name] = {
+			Destination = glut.str_split(dest, '.'),
+			DestinationFull = dest,
+			Value = child.Value
+		}
 	end
 	
 	missionGlobalFolder:Destroy()
@@ -61,20 +77,24 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 	if not success then warn("Error while running MissionSetup", missionSetup) return end
 	
 	local missionGlobalData = callbackState.MissionGlobals
-	print(missionGlobalData)
 	if missionGlobalData == nil then return end
-	if missionSetup.Globals == nil then
-		warn("MissionSetup has no Globals table, create one if needed!")
-		return
-	end
 	
 	for k, v in pairs(missionGlobalData) do
-		if missionSetup.Globals[k] ~= nil then
+		local value = tostring(v.Value)
+		local destFound, dest = glut.tbl_tryindex(missionSetup, unpack(v.Destination))
+		local fullDest = v.DestinationFull
+		
+		if not destFound or not glut.typecheck(dest, "table") then
+			warn(`Destination MissionSetup.{fullDest} is invalid - destination must be an already-existing table`, "StateValue will be skipped" )
+			continue
+		end
+		if dest[k] ~= nil then
 			warn(`StateWrangler instructed to set Globals.{k} = {v}, but a Global of the same name already exists`, "Global will be skipped")
 			continue
 		end
-		print(`Injecting Global {k} = {v}`)
-		missionSetup.Globals[tostring(k)] = tostring(v)
+		
+		print(`StateWrangler : Injecting MissionSetup.{fullDest}[\"{k}\"] = \"{value}\"`)
+		dest[tostring(k)] = value
 	end
 	
 	local newSrc = "return " .. tableWriter.write_tbl(missionSetup)
