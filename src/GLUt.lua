@@ -29,20 +29,46 @@ function GLUt.default(arg, default)
 	return (arg == nil) and default or arg
 end
 
-function GLUt.typecheck(arg, expected, argName, fName)
+function GLUt.default_exec(arg, fn)
+	return (arg == nil) and fn() or arg
+end
+
+function GLUt.default_typed(arg, default, argName, funcName)
 	local argType = GLUtCfg.type(arg)
-	
+	local defaultType = GLUtCfg.type(default)
+	if argType == defaultType then return arg end
+	if argType == "nil" then return default end
+	GLUt.type_warn(argName, funcName, defaultType, argType)
+	return default
+end
+
+function GLUt.type_warn(argName, funcName, expected, got)
+	if argName == nil or expected == got then return end
+
+	local warnStart = GLUt.type_is(funcName, "string") and (funcName .. ": expected arg \"") or "Expected arg \""
+	GLUtCfg.warn(warnStart .. argName .. "\" of type \"" .. expected .. "\" got type \"" .. got .. "\"!")
+	GLUtCfg.warn("Traceback: " .. debug.traceback())
+end
+
+function GLUt.type_check(arg, expected, argName, funcName)
+	local argType = GLUtCfg.type(arg)
+
 	expected = string.gsub(expected, '?', "|nil")
 	for _, validType in pairs(GLUt.str_split(expected, '|')) do
 		if validType == argType then return true end
 	end
-	
-	if argName ~= nil then
-		local w = (GLUtCfg.type(fName)~="string") and "Expected arg \"" or fName .. ": expected arg \""
-		GLUtCfg.warn(w .. argName .. "\" of type \"" .. expected .. "\" got type \"" .. argType .. "\"!")
-	end
-	
+
+	GLUt.type_warn(argName, funcName, expected, argType)
+
 	return false
+end
+
+function GLUt.type_is(a1, t)
+	return GLUtCfg.type(a1) == t
+end
+
+function GLUt.type_eq(a1, a2)
+	return GLUtCfg.type(a1) == GLUtCfg.type(a2)
 end
 
 function GLUt.vararg_capture(...)
@@ -62,7 +88,7 @@ end
 function GLUt.str_split(str, separator)
 	str = str .. separator
 	separator = GLUt.str_escape_pattern(separator)
-	
+
 	local substrs = {}
 	for substr in string.gmatch(str, "(.-)" .. separator) do
 		substrs[#substrs+1] = substr
@@ -101,6 +127,36 @@ function GLUt.str_getchar(str, i)
 	return string.sub(str, i, i)
 end
 
+local unidentified = -1
+function GLUt.str_runlua(source, fenv, chunkName)
+	chunkName = GLUt.default_exec(chunkName, function()
+		unidentified = unidentified + 1
+		return "loadstring#" .. tostring(unidentified) 
+	end)
+
+	local strFun, failReason = loadstring(source, chunkName)
+	if GLUtCfg.type(strFun) ~= "function" then
+		return false, "Loadstring : " .. chunkName .. " : Evaluation failed : " .. failReason
+	end
+	
+	strFun = setfenv(strFun, fenv)
+
+	return pcall(function()
+		return GLUt.vararg_capture(strFun())
+	end)
+end
+
+function GLUt.str_runlua_unsafe(source, chunkName)
+	local strFun, failReason = loadstring(source, chunkName)
+	if GLUtCfg.type(strFun) ~= "function" then
+		return false, "Loadstring : " .. chunkName .. " : Evaluation failed : " .. failReason
+	end
+	
+	return pcall(function()
+		return GLUt.vararg_capture()
+	end)
+end
+
 function GLUt.kvp_tostring(k, v)
 	return tostring(k) .. " = " .. tostring(v)
 end
@@ -119,7 +175,7 @@ end
 
 function GLUt.tbl_clone(tbl, shallow)
 	shallow = GLUt.default(shallow, false)
-	
+
 	local cloned = {}
 	for k, v in pairs(tbl) do
 		if GLUtCfg.type(v) == "table" and not shallow then

@@ -1,5 +1,12 @@
 local TableWriter = {}
 
+local tableWriterCfg = {
+	type = type,
+	warn = function(...) print("WARNING ", ...) end,
+	error = error,
+	userdata_value_writers = {}
+}
+
 local keyWriters = {
 	string = function(k)
 		if k:match("^[_%a][_%w]+$") then
@@ -21,7 +28,7 @@ local keyWriters = {
 
 local valueWriters = {
 	string = function(v)
-		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f") .. "\""
+		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f"):gsub("\"", "\\\""):gsub("\'", "\\\'"):gsub("\\", "\\\\") .. "\""
 	end,
 	table = function(v)
 		return TableWriter.write_tbl(v)
@@ -35,26 +42,21 @@ local valueWriters = {
 	["nil"] = function(v)
 		return "nil"
 	end,
-	Color3 = function(v)
-		local r = math.round(v.R*255)
-		local g = math.round(v.G*255)
-		local b = math.round(v.B*255)
-		return `Color3.fromRGB({r},{g},{b})`
-	end,
 }
 
 function TableWriter.write_key(k)
-	local kType = typeof(k)
+	local kType = tableWriterCfg.type(k)
 	local writer = keyWriters[kType]
 	if writer then return writer(k) end
-	error(`Attempt to write {kType} as key`)
+	tableWriterCfg.error("Attempt to write " .. kType .. " as key")
 end
 
 function TableWriter.write_value(v)
-	local vType = typeof(v)
+	local vType = tableWriterCfg.type(v)
 	local writer = valueWriters[vType]
+	writer = writer or tableWriterCfg.userdata_value_writers[vType]
 	if writer then return writer(v) end
-	error(`Attempt to write {vType} as value`)
+	tableWriterCfg.error("Attempt to write " .. vType .. " as value")
 end
 
 function TableWriter.write_kvp(k, v)
@@ -66,7 +68,7 @@ end
 function TableWriter.is_array(tbl)
 	local is_arr = true
 	for k, v in pairs(tbl) do
-		if type(k) ~= "number" then
+		if tableWriterCfg.type(k) ~= "number" then
 			is_arr = false
 			break
 		end
@@ -94,7 +96,7 @@ end
 
 function TableWriter.write_tbl(tbl)
 	if TableWriter.is_array(tbl) then return TableWriter.write_arr(tbl) end
-	
+
 	local n = TableWriter.tbl_count(tbl)
 	local i = 0
 	local str = '{'
@@ -104,8 +106,19 @@ function TableWriter.write_tbl(tbl)
 		if i ~= n then str = str .. ',' end
 	end
 	str = str .. '}'
-	
+
 	return str
+end
+
+function TableWriter.configure(tbl)
+	for k, v in pairs(tbl) do
+		local existingValue = tableWriterCfg[k]
+		if existingValue ~= nil then
+			tableWriterCfg[k] = v
+		else 
+			tableWriterCfg.warn("Attempt to set unsupported config key \"" .. k .. "\" = \"" .. tostring(v) .. "\"!")
+		end
+	end
 end
 
 return TableWriter

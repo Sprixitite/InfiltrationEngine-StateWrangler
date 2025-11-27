@@ -11,6 +11,19 @@ type APIReference = apiConsumer.APIReference
 local warn = warnLogger.new("StateWrangler")
 glut.configure{ warn = warn }
 
+tableWriter.configure{
+	type = typeof,
+	userdata_value_writers = {
+		Color3 = function(v)
+			local r = math.round(v.R*255)
+			local g = math.round(v.G*255)
+			local b = math.round(v.B*255)
+			return `Color3.fromRGB({r},{g},{b})`
+		end,
+	},
+	warn = warn
+}
+
 local hookName = nil
 
 local StateWrangler = {}
@@ -39,11 +52,14 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 		first = false
 	until (not present) or (success and done)
 	
-	local missionGlobalData = {}
-	callbackState.MissionGlobals = missionGlobalData
+	callbackState.MissionGlobals = nil
 	
 	local missionGlobalFolder = mission:FindFirstChild("MissionGlobals")
 	if missionGlobalFolder == nil then return end
+	
+	local missionGlobalData = {}
+	local missionGlobalCount = 0
+	callbackState.MissionGlobals = missionGlobalData
 	
 	for _, child in missionGlobalFolder:GetDescendants() do
 		if child:IsA("Folder") then continue end
@@ -65,7 +81,10 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 			DestinationFull = dest,
 			Value = child.Value
 		}
+		missionGlobalCount = missionGlobalCount + 1
 	end
+	
+	if missionGlobalCount == 0 then callbackState.MissionGlobals = nil end
 	
 	missionGlobalFolder:Destroy()
 end
@@ -84,7 +103,7 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 		local destFound, dest = glut.tbl_tryindex(missionSetup, unpack(v.Destination))
 		local fullDest = v.DestinationFull
 		
-		if not destFound or not glut.typecheck(dest, "table") then
+		if not destFound or not glut.type_check(dest, "table") then
 			warn(`Destination MissionSetup.{fullDest} is invalid - destination must be an already-existing table`, "StateValue will be skipped" )
 			continue
 		end
@@ -98,6 +117,18 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 	end
 	
 	local newSrc = "return " .. tableWriter.write_tbl(missionSetup)
+	local success, count, args = glut.str_runlua_unsafe(newSrc, "MissionSetup")
+	if not success then
+		warn(
+			"Critical Error Encountered In StateWrangler",
+			"Please report this bug to Sprixitite, with your MissionSetup attached",
+			"No Globals Will Be Injected",
+			"Error Is As Follows",
+			count
+		)
+		return
+	end
+	
 	missionSetupScript.Source = newSrc
 end
 

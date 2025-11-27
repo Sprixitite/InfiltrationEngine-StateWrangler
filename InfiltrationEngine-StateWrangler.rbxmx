@@ -177,6 +177,19 @@ type APIReference = apiConsumer.APIReference
 local warn = warnLogger.new("StateWrangler")
 glut.configure{ warn = warn }
 
+tableWriter.configure{
+	type = typeof,
+	userdata_value_writers = {
+		Color3 = function(v)
+			local r = math.round(v.R*255)
+			local g = math.round(v.G*255)
+			local b = math.round(v.B*255)
+			return `Color3.fromRGB({r},{g},{b})`
+		end,
+	},
+	warn = warn
+}
+
 local hookName = nil
 
 local StateWrangler = {}
@@ -205,11 +218,14 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 		first = false
 	until (not present) or (success and done)
 	
-	local missionGlobalData = {}
-	callbackState.MissionGlobals = missionGlobalData
+	callbackState.MissionGlobals = nil
 	
 	local missionGlobalFolder = mission:FindFirstChild("MissionGlobals")
 	if missionGlobalFolder == nil then return end
+	
+	local missionGlobalData = {}
+	local missionGlobalCount = 0
+	callbackState.MissionGlobals = missionGlobalData
 	
 	for _, child in missionGlobalFolder:GetDescendants() do
 		if child:IsA("Folder") then continue end
@@ -231,7 +247,10 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 			DestinationFull = dest,
 			Value = child.Value
 		}
+		missionGlobalCount = missionGlobalCount + 1
 	end
+	
+	if missionGlobalCount == 0 then callbackState.MissionGlobals = nil end
 	
 	missionGlobalFolder:Destroy()
 end
@@ -250,7 +269,7 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 		local destFound, dest = glut.tbl_tryindex(missionSetup, unpack(v.Destination))
 		local fullDest = v.DestinationFull
 		
-		if not destFound or not glut.typecheck(dest, "table") then
+		if not destFound or not glut.type_check(dest, "table") then
 			warn(`Destination MissionSetup.{fullDest} is invalid - destination must be an already-existing table`, "StateValue will be skipped" )
 			continue
 		end
@@ -264,6 +283,18 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 	end
 	
 	local newSrc = "return " .. tableWriter.write_tbl(missionSetup)
+	local success, count, args = glut.str_runlua_unsafe(newSrc, "MissionSetup")
+	if not success then
+		warn(
+			"Critical Error Encountered In StateWrangler",
+			"Please report this bug to Sprixitite, with your MissionSetup attached",
+			"No Globals Will Be Injected",
+			"Error Is As Follows",
+			count
+		)
+		return
+	end
+	
 	missionSetupScript.Source = newSrc
 end
 
@@ -363,6 +394,13 @@ return slogger]]></ProtectedString>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local TableWriter = {}
 
+local tableWriterCfg = {
+	type = type,
+	warn = function(...) print("WARNING ", ...) end,
+	error = error,
+	userdata_value_writers = {}
+}
+
 local keyWriters = {
 	string = function(k)
 		if k:match("^[_%a][_%w]+$") then
@@ -384,7 +422,7 @@ local keyWriters = {
 
 local valueWriters = {
 	string = function(v)
-		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f") .. "\""
+		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f"):gsub("\"", "\\\""):gsub("\'", "\\\'"):gsub("\\", "\\\\") .. "\""
 	end,
 	table = function(v)
 		return TableWriter.write_tbl(v)
@@ -398,26 +436,21 @@ local valueWriters = {
 	["nil"] = function(v)
 		return "nil"
 	end,
-	Color3 = function(v)
-		local r = math.round(v.R*255)
-		local g = math.round(v.G*255)
-		local b = math.round(v.B*255)
-		return `Color3.fromRGB({r},{g},{b})`
-	end,
 }
 
 function TableWriter.write_key(k)
-	local kType = typeof(k)
+	local kType = tableWriterCfg.type(k)
 	local writer = keyWriters[kType]
 	if writer then return writer(k) end
-	error(`Attempt to write {kType} as key`)
+	tableWriterCfg.error("Attempt to write " .. kType .. " as key")
 end
 
 function TableWriter.write_value(v)
-	local vType = typeof(v)
+	local vType = tableWriterCfg.type(v)
 	local writer = valueWriters[vType]
+	writer = writer or tableWriterCfg.userdata_value_writers[vType]
 	if writer then return writer(v) end
-	error(`Attempt to write {vType} as value`)
+	tableWriterCfg.error("Attempt to write " .. vType .. " as value")
 end
 
 function TableWriter.write_kvp(k, v)
@@ -429,7 +462,7 @@ end
 function TableWriter.is_array(tbl)
 	local is_arr = true
 	for k, v in pairs(tbl) do
-		if type(k) ~= "number" then
+		if tableWriterCfg.type(k) ~= "number" then
 			is_arr = false
 			break
 		end
@@ -457,7 +490,7 @@ end
 
 function TableWriter.write_tbl(tbl)
 	if TableWriter.is_array(tbl) then return TableWriter.write_arr(tbl) end
-	
+
 	local n = TableWriter.tbl_count(tbl)
 	local i = 0
 	local str = '{'
@@ -467,8 +500,19 @@ function TableWriter.write_tbl(tbl)
 		if i ~= n then str = str .. ',' end
 	end
 	str = str .. '}'
-	
+
 	return str
+end
+
+function TableWriter.configure(tbl)
+	for k, v in pairs(tbl) do
+		local existingValue = tableWriterCfg[k]
+		if existingValue ~= nil then
+			tableWriterCfg[k] = v
+		else 
+			tableWriterCfg.warn("Attempt to set unsupported config key \"" .. k .. "\" = \"" .. tostring(v) .. "\"!")
+		end
+	end
 end
 
 return TableWriter]]></ProtectedString>
@@ -515,20 +559,46 @@ function GLUt.default(arg, default)
 	return (arg == nil) and default or arg
 end
 
-function GLUt.typecheck(arg, expected, argName, fName)
+function GLUt.default_exec(arg, fn)
+	return (arg == nil) and fn() or arg
+end
+
+function GLUt.default_typed(arg, default, argName, funcName)
 	local argType = GLUtCfg.type(arg)
-	
+	local defaultType = GLUtCfg.type(default)
+	if argType == defaultType then return arg end
+	if argType == "nil" then return default end
+	GLUt.type_warn(argName, funcName, defaultType, argType)
+	return default
+end
+
+function GLUt.type_warn(argName, funcName, expected, got)
+	if argName == nil or expected == got then return end
+
+	local warnStart = GLUt.type_is(funcName, "string") and (funcName .. ": expected arg \"") or "Expected arg \""
+	GLUtCfg.warn(warnStart .. argName .. "\" of type \"" .. expected .. "\" got type \"" .. got .. "\"!")
+	GLUtCfg.warn("Traceback: " .. debug.traceback())
+end
+
+function GLUt.type_check(arg, expected, argName, funcName)
+	local argType = GLUtCfg.type(arg)
+
 	expected = string.gsub(expected, '?', "|nil")
 	for _, validType in pairs(GLUt.str_split(expected, '|')) do
 		if validType == argType then return true end
 	end
-	
-	if argName ~= nil then
-		local w = (GLUtCfg.type(fName)~="string") and "Expected arg \"" or fName .. ": expected arg \""
-		GLUtCfg.warn(w .. argName .. "\" of type \"" .. expected .. "\" got type \"" .. argType .. "\"!")
-	end
-	
+
+	GLUt.type_warn(argName, funcName, expected, argType)
+
 	return false
+end
+
+function GLUt.type_is(a1, t)
+	return GLUtCfg.type(a1) == t
+end
+
+function GLUt.type_eq(a1, a2)
+	return GLUtCfg.type(a1) == GLUtCfg.type(a2)
 end
 
 function GLUt.vararg_capture(...)
@@ -548,7 +618,7 @@ end
 function GLUt.str_split(str, separator)
 	str = str .. separator
 	separator = GLUt.str_escape_pattern(separator)
-	
+
 	local substrs = {}
 	for substr in string.gmatch(str, "(.-)" .. separator) do
 		substrs[#substrs+1] = substr
@@ -587,6 +657,36 @@ function GLUt.str_getchar(str, i)
 	return string.sub(str, i, i)
 end
 
+local unidentified = -1
+function GLUt.str_runlua(source, fenv, chunkName)
+	chunkName = GLUt.default_exec(chunkName, function()
+		unidentified = unidentified + 1
+		return "loadstring#" .. tostring(unidentified) 
+	end)
+
+	local strFun, failReason = loadstring(source, chunkName)
+	if GLUtCfg.type(strFun) ~= "function" then
+		return false, "Loadstring : " .. chunkName .. " : Evaluation failed : " .. failReason
+	end
+	
+	strFun = setfenv(strFun, fenv)
+
+	return pcall(function()
+		return GLUt.vararg_capture(strFun())
+	end)
+end
+
+function GLUt.str_runlua_unsafe(source, chunkName)
+	local strFun, failReason = loadstring(source, chunkName)
+	if GLUtCfg.type(strFun) ~= "function" then
+		return false, "Loadstring : " .. chunkName .. " : Evaluation failed : " .. failReason
+	end
+	
+	return pcall(function()
+		return GLUt.vararg_capture()
+	end)
+end
+
 function GLUt.kvp_tostring(k, v)
 	return tostring(k) .. " = " .. tostring(v)
 end
@@ -605,7 +705,7 @@ end
 
 function GLUt.tbl_clone(tbl, shallow)
 	shallow = GLUt.default(shallow, false)
-	
+
 	local cloned = {}
 	for k, v in pairs(tbl) do
 		if GLUtCfg.type(v) == "table" and not shallow then
