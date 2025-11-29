@@ -89,7 +89,7 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 	missionGlobalFolder:Destroy()
 end
 
-function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, missionSetupScript)
+function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, missionSetupScript: ModuleScript)
 	local warn = warn.specialize("OnPreSerializeMissionSetup")
 	
 	local success, missionSetup = pcall(function() return require(missionSetupScript) end)
@@ -125,6 +125,10 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 			"Error Is As Follows",
 			count
 		)
+		local faulty = Instance.new("ModuleScript")
+		faulty.Name = "FaultyMissionSetup"
+		faulty.Source = newSrc
+		faulty.Parent = missionSetupScript.Parent
 		return
 	end
 	

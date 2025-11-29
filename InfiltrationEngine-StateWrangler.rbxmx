@@ -255,7 +255,7 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 	missionGlobalFolder:Destroy()
 end
 
-function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, missionSetupScript)
+function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, missionSetupScript: ModuleScript)
 	local warn = warn.specialize("OnPreSerializeMissionSetup")
 	
 	local success, missionSetup = pcall(function() return require(missionSetupScript) end)
@@ -291,6 +291,10 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 			"Error Is As Follows",
 			count
 		)
+		local faulty = Instance.new("ModuleScript")
+		faulty.Name = "FaultyMissionSetup"
+		faulty.Source = newSrc
+		faulty.Parent = missionSetupScript.Parent
 		return
 	end
 	
@@ -422,7 +426,7 @@ local keyWriters = {
 
 local valueWriters = {
 	string = function(v)
-		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f"):gsub("\"", "\\\""):gsub("\'", "\\\'"):gsub("\\", "\\\\") .. "\""
+		return "\"" .. tostring(v):gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f"):gsub("\"", "\\\""):gsub("\'", "\\\'") .. "\""
 	end,
 	table = function(v)
 		return TableWriter.write_tbl(v)

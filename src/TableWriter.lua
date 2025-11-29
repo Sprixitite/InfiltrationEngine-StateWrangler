@@ -28,7 +28,7 @@ local keyWriters = {
 
 local valueWriters = {
 	string = function(v)
-		return "\"" .. tostring(v):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f"):gsub("\"", "\\\""):gsub("\'", "\\\'"):gsub("\\", "\\\\") .. "\""
+		return "\"" .. tostring(v):gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f"):gsub("\"", "\\\""):gsub("\'", "\\\'") .. "\""
 	end,
 	table = function(v)
 		return TableWriter.write_tbl(v)
