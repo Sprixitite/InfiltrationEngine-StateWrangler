@@ -112,7 +112,6 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 			continue
 		end
 		
-		print(`StateWrangler : Injecting MissionSetup.{fullDest}[\"{k}\"] = \"{value}\"`)
 		dest[tostring(k)] = value
 	end
 	
@@ -129,6 +128,7 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 		return
 	end
 	
+	print("StateWrangler : Successfully injected mission globals")
 	missionSetupScript.Source = newSrc
 end
 

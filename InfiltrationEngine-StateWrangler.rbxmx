@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Folder" referent="RBXBDD5C7DE776D4BD9B5C6AB1C20D373B4">
+	<Item class="Folder" referent="RBX4F851F4DB38942D88990587AD9C187D0">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -10,7 +10,7 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBXFAA439A62C7C40B48A8DAB698F3AF972">
+		<Item class="ModuleScript" referent="RBXC8D42BB09E7C422D90DA386409C8BD41">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[
@@ -162,7 +162,7 @@ return APIConsumer]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="Script" referent="RBXE652DA6BBED54A33B2CE44873861DAD9">
+		<Item class="Script" referent="RBXFA4142BCEB1842628E3F6577F6D0C7F4">
 			<Properties>
 				<ProtectedString name="Source"><![CDATA[local apiConsumer = require(script.Parent.APIConsumer)
 local warnLogger = require(script.Parent.Slogger)
@@ -278,7 +278,6 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 			continue
 		end
 		
-		print(`StateWrangler : Injecting MissionSetup.{fullDest}[\"{k}\"] = \"{value}\"`)
 		dest[tostring(k)] = value
 	end
 	
@@ -295,6 +294,7 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 		return
 	end
 	
+	print("StateWrangler : Successfully injected mission globals")
 	missionSetupScript.Source = newSrc
 end
 
@@ -311,7 +311,7 @@ apiConsumer.DoAPILoop(plugin, "InfiltrationEngine-StateWrangler", StateWrangler.
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXC6BE4FB86BF24A05BCCF6C4646F9A850">
+		<Item class="ModuleScript" referent="RBXDF9B9606E34B45E29294E18E7AB7DC12">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[
@@ -389,7 +389,7 @@ return slogger]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXD9CADC3186CE43A4858AB68956A9CDB9">
+		<Item class="ModuleScript" referent="RBXB166B0403F2F435BAE87890A7A58B8D8">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local TableWriter = {}
@@ -479,12 +479,12 @@ function TableWriter.tbl_count(tbl)
 end
 
 function TableWriter.write_arr(tbl)
-	local str = '{'
+	local str = '{\n'
 	for i, v in ipairs(tbl) do
 		str = str .. TableWriter.write_value(v)
-		if i ~= #tbl then str = str .. ',' end
+		if i ~= #tbl then str = str .. ',\n' end
 	end
-	str = str .. '}'
+	str = str .. '\n}'
 	return str
 end
 
@@ -493,13 +493,13 @@ function TableWriter.write_tbl(tbl)
 
 	local n = TableWriter.tbl_count(tbl)
 	local i = 0
-	local str = '{'
+	local str = '{\n'
 	for k, v in pairs(tbl) do
 		i = i + 1
-		str = str .. TableWriter.write_kvp(k, v)
-		if i ~= n then str = str .. ',' end
+		str = str .. "\t" .. TableWriter.write_kvp(k, v):gsub("\n", "\n\t")
+		if i ~= n then str = str .. ',\n' end
 	end
-	str = str .. '}'
+	str = str .. '\n}'
 
 	return str
 end
@@ -525,7 +525,7 @@ return TableWriter]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXA694ACDDC9AC4A0082CC3C54543E0216">
+		<Item class="ModuleScript" referent="RBXB0943F3D3D1B454EA40BEB34F6ED661F">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[
@@ -626,6 +626,10 @@ function GLUt.str_split(str, separator)
 	return substrs
 end
 
+function GLUt.str_has_match(str, pattern)
+	return string.match(str, pattern) ~= nil
+end
+
 function GLUt.str_escape_pattern(str)
 	local escaped = str
 	for _, specChar in ipairs(patternSpecChars) do
@@ -668,7 +672,7 @@ function GLUt.str_runlua(source, fenv, chunkName)
 	if GLUtCfg.type(strFun) ~= "function" then
 		return false, "Loadstring : " .. chunkName .. " : Evaluation failed : " .. failReason
 	end
-	
+
 	strFun = setfenv(strFun, fenv)
 
 	return pcall(function()
@@ -681,7 +685,7 @@ function GLUt.str_runlua_unsafe(source, chunkName)
 	if GLUtCfg.type(strFun) ~= "function" then
 		return false, "Loadstring : " .. chunkName .. " : Evaluation failed : " .. failReason
 	end
-	
+
 	return pcall(function()
 		return GLUt.vararg_capture()
 	end)
@@ -701,6 +705,30 @@ function GLUt.tbl_tryindex(tbl, ...)
 	end
 
 	return true, indexing
+end
+
+function GLUt.tbl_deepget(tbl, create_missing, ...)
+	local indexing = tbl
+	for _, k in GLUt.vararg_iter(...) do
+		k = tostring(k)
+		if GLUtCfg.type(indexing) ~= "table" then
+			return false, indexing
+		end
+
+		if indexing[k] == nil and create_missing then
+			indexing[k] = {}
+		end
+
+		indexing = indexing[k]
+	end
+
+	return true, indexing
+end
+
+function GLUt.tbl_getkeys(tbl)
+	local keys = {}
+	for k, _ in pairs(tbl) do keys[#keys+1] = k end
+	return keys
 end
 
 function GLUt.tbl_clone(tbl, shallow)
@@ -744,6 +772,24 @@ end
 function GLUt.tbl_tostring(tbl, levels, tblName)
 	GLUt.default(tblName, tostring(tbl))
 	return tbl_tostring(tblName, tbl, levels, 1)
+end
+
+function GLUt.tbl_any(tbl, f)
+	local anySucceed = nil
+	for k, v in pairs(tbl) do
+		anySucceed = GLUt.default(anySucceed, false) or f(k, v)
+		if anySucceed then break end
+	end
+	return anySucceed
+end
+
+function GLUt.tbl_all(tbl, f)
+	local allSucceed = nil
+	for k, v in pairs(tbl) do
+		allSucceed = GLUt.default(allSucceed, true) and f(k, v)
+		if not allSucceed then break end
+	end
+	return allSucceed
 end
 
 return GLUt]]></ProtectedString>

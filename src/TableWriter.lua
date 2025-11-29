@@ -85,12 +85,12 @@ function TableWriter.tbl_count(tbl)
 end
 
 function TableWriter.write_arr(tbl)
-	local str = '{'
+	local str = '{\n'
 	for i, v in ipairs(tbl) do
 		str = str .. TableWriter.write_value(v)
-		if i ~= #tbl then str = str .. ',' end
+		if i ~= #tbl then str = str .. ',\n' end
 	end
-	str = str .. '}'
+	str = str .. '\n}'
 	return str
 end
 
@@ -99,13 +99,13 @@ function TableWriter.write_tbl(tbl)
 
 	local n = TableWriter.tbl_count(tbl)
 	local i = 0
-	local str = '{'
+	local str = '{\n'
 	for k, v in pairs(tbl) do
 		i = i + 1
-		str = str .. TableWriter.write_kvp(k, v)
-		if i ~= n then str = str .. ',' end
+		str = str .. "\t" .. TableWriter.write_kvp(k, v):gsub("\n", "\n\t")
+		if i ~= n then str = str .. ',\n' end
 	end
-	str = str .. '}'
+	str = str .. '\n}'
 
 	return str
 end
