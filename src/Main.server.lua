@@ -65,8 +65,8 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 		if child:IsA("Folder") then continue end
 		
 		local warn = warn.specialize(`MissionGlobal {child.Parent}.{child} is invalid`)
-		if not child:IsA("StringValue") then
-			warn(`Expected type StringValue got {child.ClassName}`, "Value will be ignored")
+		if not child:IsA("ValueBase") then
+			warn(`Expected type ValueBase got {child.ClassName}`, "Value will be ignored")
 			continue
 		end
 		
@@ -99,7 +99,7 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 	if missionGlobalData == nil then return end
 	
 	for k, v in pairs(missionGlobalData) do
-		local value = tostring(v.Value)
+		local value = v.Value
 		local destFound, dest = glut.tbl_tryindex(missionSetup, unpack(v.Destination))
 		local fullDest = v.DestinationFull
 		

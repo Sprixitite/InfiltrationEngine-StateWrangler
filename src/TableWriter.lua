@@ -7,25 +7,6 @@ local tableWriterCfg = {
 	userdata_value_writers = {}
 }
 
-local keyWriters = {
-	string = function(k)
-		if k:match("^[_%a][_%w]+$") then
-			return k
-		else
-			return "[\"" .. k .. "\"]"
-		end
-	end,
-	boolean = function(k)
-		return '[' .. tostring(k) .. ']'
-	end,
-	number = function(k)
-		return '[' .. tostring(k) .. ']'
-	end,
-	["nil"] = function(k)
-		return "[nil]"
-	end,
-}
-
 local valueWriters = {
 	string = function(v)
 		return "\"" .. tostring(v):gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\t", "\\t"):gsub("\r", "\\r"):gsub("\v", "\\v"):gsub("\f", "\\f"):gsub("\"", "\\\""):gsub("\'", "\\\'") .. "\""
@@ -41,6 +22,25 @@ local valueWriters = {
 	end,
 	["nil"] = function(v)
 		return "nil"
+	end,
+}
+
+local keyWriters = {
+	string = function(k)
+		if k:match("^[_%a][_%w]+$") then
+			return k
+		else
+			return '[' .. valueWriters.string(k) .. ']' 
+		end
+	end,
+	boolean = function(k)
+		return '[' .. tostring(k) .. ']'
+	end,
+	number = function(k)
+		return '[' .. tostring(k) .. ']'
+	end,
+	["nil"] = function(k)
+		return "[nil]"
 	end,
 }
 
