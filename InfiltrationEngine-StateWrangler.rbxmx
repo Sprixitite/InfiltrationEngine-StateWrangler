@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Folder" referent="RBX4F851F4DB38942D88990587AD9C187D0">
+	<Item class="Folder" referent="RBX663AA094DAE84A13A287A17F29FD1CE3">
 		<Properties>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
@@ -10,7 +10,7 @@
 			<int64 name="SourceAssetId">-1</int64>
 			<BinaryString name="Tags"></BinaryString>
 		</Properties>
-		<Item class="ModuleScript" referent="RBXC8D42BB09E7C422D90DA386409C8BD41">
+		<Item class="ModuleScript" referent="RBX4DD0299B31FA460F979DEA7C483E9AAE">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[
@@ -162,7 +162,7 @@ return APIConsumer]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="Script" referent="RBXFA4142BCEB1842628E3F6577F6D0C7F4">
+		<Item class="Script" referent="RBXCA54880432864191A7EFF94410A0065F">
 			<Properties>
 				<ProtectedString name="Source"><![CDATA[local apiConsumer = require(script.Parent.APIConsumer)
 local warnLogger = require(script.Parent.Slogger)
@@ -213,10 +213,15 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 	local first = true
 	repeat
 		if not first then coroutine.yield() end
-		local _, present = invokeState.Get("Sprix_PrefabSystem_PreSerialize_Present")
-		local success, done = invokeState.Get("Sprix_PrefabSystem_PreSerialize", "Done")
+		local _, prefabPresent = invokeState.Get("Sprix_PrefabSystem_PreSerialize_Present")
+		local prefabSuccess, prefabDone = invokeState.Get("Sprix_PrefabSystem_PreSerialize", "Done")
+		local prefabDone = (not prefabPresent) or (prefabSuccess and prefabDone)
+		
+		local _, continentPresent = invokeState.Get("Sprix_ContinentController_PreSerialize_Present")
+		local continentSuccess, continentDone = invokeState.Get("Sprix_ContinentController_PreSerialize", "Done")
+		local continentDone = (not continentPresent) or (continentSuccess and continentDone)
 		first = false
-	until (not present) or (success and done)
+	until prefabDone and continentDone
 	
 	callbackState.MissionGlobals = nil
 	
@@ -231,8 +236,8 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 		if child:IsA("Folder") then continue end
 		
 		local warn = warn.specialize(`MissionGlobal {child.Parent}.{child} is invalid`)
-		if not child:IsA("StringValue") then
-			warn(`Expected type StringValue got {child.ClassName}`, "Value will be ignored")
+		if not child:IsA("ValueBase") then
+			warn(`Expected type ValueBase got {child.ClassName}`, "Value will be ignored")
 			continue
 		end
 		
@@ -265,7 +270,7 @@ function StateWrangler.OnPreSerializeMissionSetup(callbackState, invokeState, mi
 	if missionGlobalData == nil then return end
 	
 	for k, v in pairs(missionGlobalData) do
-		local value = tostring(v.Value)
+		local value = v.Value
 		local destFound, dest = glut.tbl_tryindex(missionSetup, unpack(v.Destination))
 		local fullDest = v.DestinationFull
 		
@@ -315,7 +320,7 @@ apiConsumer.DoAPILoop(plugin, "InfiltrationEngine-StateWrangler", StateWrangler.
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXDF9B9606E34B45E29294E18E7AB7DC12">
+		<Item class="ModuleScript" referent="RBXAF854E9B46AE4218995548A4FDC09EAB">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[
@@ -393,7 +398,7 @@ return slogger]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXB166B0403F2F435BAE87890A7A58B8D8">
+		<Item class="ModuleScript" referent="RBXCCED3AA0B8BF466394973015112BC29A">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[local TableWriter = {}
@@ -403,25 +408,6 @@ local tableWriterCfg = {
 	warn = function(...) print("WARNING ", ...) end,
 	error = error,
 	userdata_value_writers = {}
-}
-
-local keyWriters = {
-	string = function(k)
-		if k:match("^[_%a][_%w]+$") then
-			return k
-		else
-			return "[\"" .. k .. "\"]"
-		end
-	end,
-	boolean = function(k)
-		return '[' .. tostring(k) .. ']'
-	end,
-	number = function(k)
-		return '[' .. tostring(k) .. ']'
-	end,
-	["nil"] = function(k)
-		return "[nil]"
-	end,
 }
 
 local valueWriters = {
@@ -439,6 +425,25 @@ local valueWriters = {
 	end,
 	["nil"] = function(v)
 		return "nil"
+	end,
+}
+
+local keyWriters = {
+	string = function(k)
+		if k:match("^[_%a][_%w]+$") then
+			return k
+		else
+			return '[' .. valueWriters.string(k) .. ']' 
+		end
+	end,
+	boolean = function(k)
+		return '[' .. tostring(k) .. ']'
+	end,
+	number = function(k)
+		return '[' .. tostring(k) .. ']'
+	end,
+	["nil"] = function(k)
+		return "[nil]"
 	end,
 }
 
@@ -484,12 +489,25 @@ end
 
 function TableWriter.write_arr(tbl)
 	local str = '{\n'
-	for i, v in ipairs(tbl) do
+	for i, v in TableWriter.sorted_iter(tbl) do
 		str = str .. TableWriter.write_value(v)
 		if i ~= #tbl then str = str .. ',\n' end
 	end
 	str = str .. '\n}'
 	return str
+end
+
+function TableWriter.sorted_iter(tbl)
+	local keys = {}
+	for k, _ in pairs(tbl) do keys[#keys+1] = k end
+	table.sort(keys)
+	local i = 0
+	return function()
+		i = i + 1
+		if i > #keys then return nil end
+		local key = keys[i]
+		return key, tbl[key]
+	end
 end
 
 function TableWriter.write_tbl(tbl)
@@ -498,7 +516,7 @@ function TableWriter.write_tbl(tbl)
 	local n = TableWriter.tbl_count(tbl)
 	local i = 0
 	local str = '{\n'
-	for k, v in pairs(tbl) do
+	for k, v in TableWriter.sorted_iter(tbl) do
 		i = i + 1
 		str = str .. "\t" .. TableWriter.write_kvp(k, v):gsub("\n", "\n\t")
 		if i ~= n then str = str .. ',\n' end
@@ -529,7 +547,7 @@ return TableWriter]]></ProtectedString>
 				<BinaryString name="Tags"></BinaryString>
 			</Properties>
 		</Item>
-		<Item class="ModuleScript" referent="RBXB0943F3D3D1B454EA40BEB34F6ED661F">
+		<Item class="ModuleScript" referent="RBX6C8B610D336747BCB2E60BADCEF976A5">
 			<Properties>
 				<Content name="LinkedSource"><null></null></Content>
 				<ProtectedString name="Source"><![CDATA[--[[

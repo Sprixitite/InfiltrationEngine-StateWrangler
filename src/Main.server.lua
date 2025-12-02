@@ -47,10 +47,15 @@ function StateWrangler.OnPreSerialize(callbackState, invokeState, mission: Folde
 	local first = true
 	repeat
 		if not first then coroutine.yield() end
-		local _, present = invokeState.Get("Sprix_PrefabSystem_PreSerialize_Present")
-		local success, done = invokeState.Get("Sprix_PrefabSystem_PreSerialize", "Done")
+		local _, prefabPresent = invokeState.Get("Sprix_PrefabSystem_PreSerialize_Present")
+		local prefabSuccess, prefabDone = invokeState.Get("Sprix_PrefabSystem_PreSerialize", "Done")
+		local prefabDone = (not prefabPresent) or (prefabSuccess and prefabDone)
+		
+		local _, continentPresent = invokeState.Get("Sprix_ContinentController_PreSerialize_Present")
+		local continentSuccess, continentDone = invokeState.Get("Sprix_ContinentController_PreSerialize", "Done")
+		local continentDone = (not continentPresent) or (continentSuccess and continentDone)
 		first = false
-	until (not present) or (success and done)
+	until prefabDone and continentDone
 	
 	callbackState.MissionGlobals = nil
 	
